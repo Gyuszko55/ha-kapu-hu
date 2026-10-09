@@ -1,0 +1,504 @@
+blueprint:
+  name: "Kapu/garázs automata nyitás érkezéskor (Bluetooth/WiFi/rendszám)"
+  description: >
+    Fokozott biztonságú automata kapu-/garázsajtó-nyitás érkezéskor.
+    Egy másik ötletből tanulva (HA Community "V2 Automatically unlock
+    your door when getting in bluetooth range" blueprint) a fő logika:
+    1. faktor - a megadott személy belép a megadott GPS-zónába;
+    2. faktor - Bluetooth-kapcsolat az autóval ÉS/VAGY WiFi-csatlakozás
+    esemény az otthoni hálózathoz igazolja, hogy tényleg megérkezett
+    (nem csak gyalogosan/telefon nélkül van a közelben). Ha mindkét
+    módszer be van kapcsolva, amelyik ELŐBB igazolja az érkezést, az
+    nyit - nem kell tudni előre, melyik módszer lesz elérhető (pl.
+    vezetékes vs. vezeték nélküli Android Auto esetén a Bluetooth/WiFi
+    elérhetősége eltérhet).
+
+    OPCIONÁLIS RENDSZÁMFELISMERÉS (ALPR): olyan alkalmi családtaghoz/
+    vendéghez, akinek NINCS állandó HA-jelenléte (nincs person
+    entitása/telepített appja) - ilyenkor egy Frigate-alapú (vagy
+    hasonló) rendszámfelismerő szenzor közvetlenül, a zóna+telefon
+    logikától FÜGGETLENÜL nyithat kaput, ha a felismert rendszám egy
+    engedélyezett listán szerepel. A person_entity/zone_entity mezők
+    ekkor is kitöltendők (a séma megköveteli), de funkcionálisan
+    nincs hatásuk, ha csak a rendszámfelismerést használod.
+
+    KAPU-HELYZET ELLENŐRZÉS FORRÁSA: alapból a megadott kapu/
+    garázsajtó cover saját (open/closed) állapotát nézzük "zárva
+    van-e nyitás előtt" és "tényleg kinyílt-e" ellenőrzésre. Ha a
+    kapumotor saját pozíció-jelzése megbízhatatlan (pl. felhő-alapú
+    vezérlőknél előfordul), egy KÜLÖN, megbízhatóbb szenzor (pl.
+    Zigbee mágneses nyitásérzékelő) is megadható helyette - lásd
+    lent a "Kapu-helyzet ellenőrzés forrása" szekciót.
+
+    TÖBB TELEFONHOZ/AUTÓHOZ: hozz létre egy külön automatizálást
+    ebből a blueprint-ből MINDEN egyes személyhez/autóhoz, saját
+    paraméterekkel (pl. "Kapu - Anna" és "Kapu - Béla" két külön
+    automatizálásként). Egy közös "Fő kapcsoló" helperrel mindegyiket
+    egyszerre le lehet tiltani.
+
+    ELŐFELTÉTELEK, amiket előre létre kell hoznod:
+    - Egy input_boolean helper a "Fő kapcsoló"-hoz (Beállítások ->
+      Eszközök és szolgáltatások -> Helperek -> Kapcsoló)
+    - Ha Bluetooth-t használsz: a telefon Companion App "Bluetooth
+      Connection" szenzora engedélyezve (alapból letiltott lehet a HA
+      entitás-regiszterben - Beállítások -> Eszközök és szolgáltatások
+      -> az eszköz -> a szenzor -> fogaskerék -> Engedélyezés)
+    - Ha WiFi-t használsz: a telefon Companion App "Wi-Fi Connection"
+      (BSSID) szenzora, ugyanígy engedélyezve
+    - Ha rendszámfelismerést használsz: egy Frigate (vagy hasonló)
+      ALPR-szenzor, aminek az ÁLLAPOTA a legutóbb felismert rendszám
+  domain: automation
+  author: Gyuszko55
+  source_url: https://github.com/Gyuszko55/ha-kapu-hu/blob/main/blueprints/automation/hu_kapu/kapu_erkezes.yaml
+  homeassistant:
+    min_version: "2025.10.0"
+  input:
+    person_entity:
+      name: Személy
+      description: Kinek a telefonját/érkezését figyeljük.
+      selector:
+        entity:
+          domain: person
+    zone_entity:
+      name: Zóna
+      description: A közeledés-előjelzéshez figyelt GPS-zóna.
+      default: zone.home
+      selector:
+        entity:
+          domain: zone
+    master_enable:
+      name: Fő kapcsoló (input_boolean helper)
+      description: >
+        Előre létrehozott input_boolean, amivel ez az automatika
+        ki/be kapcsolható anélkül, hogy magát az automatizálást le
+        kellene tiltani.
+      selector:
+        entity:
+          domain: input_boolean
+    gate_cover:
+      name: Kapu/garázsajtó
+      selector:
+        entity:
+          domain: cover
+
+    position_section:
+      name: "Kapu-helyzet ellenőrzés forrása (opcionális)"
+      description: >
+        Alapból a fenti kapu/garázsajtó cover SAJÁT (open/closed)
+        állapotát használjuk kétszer: (1) nyitás ELŐTT ellenőrizzük,
+        hogy tényleg zárva van-e, (2) nyitás UTÁN várjuk meg, hogy
+        tényleg "nyitva" lett-e (csak ezután megy ki a fotó/
+        értesítés). Egyes kapumotorok (pl. felhő-alapú vezérlők)
+        pozíció-jelzése pontatlan/flaky lehet. Ha van egy KÜLÖN,
+        megbízhatóbb szenzorod (pl. egy Zigbee/Z2M mágneses
+        nyitásérzékelő az ajtó/kapu élén), itt megadhatod - onnantól
+        EZT használjuk mindkét ellenőrzéshez a cover állapota
+        helyett. Teljesen univerzális: bármilyen entitás megadható,
+        a hozzá tartozó "zárva"/"nyitva" állapotszöveggel együtt (pl.
+        egy be/ki érzékelőnél ez gyakran "off"/"on", nem "closed"/
+        "open").
+      collapsed: true
+      input:
+        position_sensor:
+          name: Külön helyzet-érzékelő entitás (opcionális)
+          description: >
+            Pl. egy Zigbee/Z2M mágneses nyitásérzékelő
+            (binary_sensor), vagy bármilyen más entitás, aminek az
+            állapota megbízhatóan jelzi a kapu tényleges nyitott/
+            zárt állapotát. Üresen hagyva a fenti kapu/garázsajtó
+            cover saját állapotát használjuk.
+          default: ""
+          selector:
+            entity:
+        position_sensor_closed_state:
+          name: "'Zárva' állapot értéke ezen az entitáson"
+          description: >
+            Cover entitásnál "closed". Egy be/ki (on/off) érzékelőnél
+            attól függ, melyik drótvég/mágnes van bekötve - gyakran
+            "off" jelenti a zárt állapotot.
+          default: "closed"
+          selector:
+            text:
+        position_sensor_open_state:
+          name: "'Nyitva' állapot értéke ezen az entitáson"
+          description: >
+            Cover entitásnál "open". Egy be/ki érzékelőnél gyakran
+            "on".
+          default: "open"
+          selector:
+            text:
+
+    bluetooth_section:
+      name: Bluetooth-ellenőrzés
+      description: Azonnali ellenőrzés zónába lépéskor.
+      collapsed: false
+      input:
+        use_bluetooth:
+          name: Bluetooth-ellenőrzés használata
+          default: false
+          selector:
+            boolean:
+        bluetooth_sensor:
+          name: Bluetooth connection szenzor
+          description: >
+            sensor.<telefon>_bluetooth_connection - csak akkor
+            kötelező, ha a Bluetooth-ellenőrzés be van kapcsolva.
+          default: ""
+          selector:
+            entity:
+              domain: sensor
+        bluetooth_target_name:
+          name: Autó Bluetooth-nevének részlete
+          description: >
+            Pl. "Toyota" vagy "Car Multimedia" - ezt a szöveget keressük a telefon éppen
+            csatlakoztatott Bluetooth-eszközei között.
+          default: ""
+          selector:
+            text:
+
+    wifi_section:
+      name: WiFi-csatlakozás ellenőrzés
+      description: >
+        Késleltetett, eseményalapú ellenőrzés - ha a Bluetooth nem
+        (vagy nincs bekapcsolva), erre várunk egy ideig zónába lépés
+        után.
+      collapsed: false
+      input:
+        use_wifi:
+          name: WiFi-csatlakozás használata
+          default: false
+          selector:
+            boolean:
+        wifi_sensor:
+          name: WiFi BSSID szenzor
+          description: >
+            sensor.<telefon>_wi_fi_bssid (technikai okokból listaként
+            kérjük, de csak egyet válassz ki).
+          default: []
+          selector:
+            entity:
+              domain: sensor
+              multiple: true
+        wifi_target_bssid:
+          name: Otthoni WiFi BSSID
+          description: A router BSSID-je (pl. router admin felületéről).
+          default: ""
+          selector:
+            text:
+        wifi_wait_minutes:
+          name: Készenléti ablak (perc)
+          description: >
+            Ha a Bluetooth nem igazolt azonnal, ennyi ideig várunk a
+            WiFi-csatlakozás eseményre zónába lépés után.
+          default: 3
+          selector:
+            number:
+              min: 1
+              max: 15
+              unit_of_measurement: perc
+              mode: box
+
+    alpr_section:
+      name: Rendszámfelismerés (ALPR, opcionális)
+      description: >
+        Önálló, a zóna+telefon logikától FÜGGETLEN azonosítási út -
+        alkalmi családtagokhoz/vendégekhez, akiknek nincs állandó
+        HA-jelenlétük. A megadott szenzor ÁLLAPOTVÁLTOZÁSA (új
+        rendszám felismerése) közvetlenül nyithat kaput, ha a
+        felismert rendszám az engedélyezett listán van - a zónába
+        lépést és a Bluetooth/WiFi-t is megkerüli.
+      collapsed: true
+      input:
+        use_alpr:
+          name: Rendszámfelismerés használata
+          default: false
+          selector:
+            boolean:
+        alpr_plate_sensor:
+          name: Felismert rendszám szenzor
+          description: >
+            Pl. egy Frigate LPR szenzor, aminek az állapota a
+            legutóbb felismert rendszám (technikai okokból listaként
+            kérjük, de csak egyet válassz ki).
+          default: []
+          selector:
+            entity:
+              domain: sensor
+              multiple: true
+        alpr_allowed_plates:
+          name: Engedélyezett rendszám(ok)
+          description: >
+            Vesszővel elválasztva, ha több rendszám is megengedett
+            ehhez a példányhoz (pl. "ABC-123, XYZ-987"). Kis/nagybetű
+            és szóköz nem számít.
+          default: ""
+          selector:
+            text:
+
+    autoclose_section:
+      name: Automatikus zárás (opcionális)
+      description: >
+        Ha a kapumotornak van saját beépített auto-zárás időzítője
+        (select entitás), itt beállítható, hogy nyitás előtt ezt
+        állítsa be a blueprint - ez megbízhatóbb egy HA-oldali
+        időzítőnél, mert HA-újraindítás esetén sem vész el.
+      collapsed: true
+      input:
+        gate_autoclose_select:
+          name: Kapu saját auto-zárás select entitása
+          default: ""
+          selector:
+            entity:
+              domain: select
+        gate_autoclose_option:
+          name: Auto-zárás opció értéke
+          description: Pl. "seconds_60" - az entitás lehetséges értékei közül.
+          default: ""
+          selector:
+            text:
+
+    safety_section:
+      name: Biztonsági beállítások
+      collapsed: true
+      input:
+        cooldown_seconds:
+          name: Cooldown (mp)
+          description: Minimum időköz két automatikus nyitás között.
+          default: 120
+          selector:
+            number:
+              min: 0
+              max: 600
+              unit_of_measurement: mp
+              mode: box
+        night_mode_enabled:
+          name: Éjszakai tiltás bekapcsolása
+          default: false
+          selector:
+            boolean:
+        night_mode_start:
+          name: Tiltás kezdete
+          default: "23:00:00"
+          selector:
+            time:
+        night_mode_end:
+          name: Tiltás vége
+          default: "05:00:00"
+          selector:
+            time:
+
+    notification_section:
+      name: Értesítés (opcionális)
+      collapsed: true
+      input:
+        notify_service:
+          name: Notify szolgáltatás
+          description: Pl. "notify.mobile_app_telefonom" - üresen hagyva nincs értesítés.
+          default: ""
+          selector:
+            text:
+        camera_entity:
+          name: Kamera (pillanatképhez az értesítésben)
+          default: ""
+          selector:
+            entity:
+              domain: camera
+        notification_delay_seconds:
+          name: Késleltetés a fotó előtt (mp)
+          description: >
+            A kapu nyitási parancsa után megvárjuk, amíg a kapu
+            ténylegesen "nyitva" állapotba kerül (max. 30 mp-ig), majd
+            EZT a plusz késleltetést is - csak utána készül a
+            pillanatkép és megy ki az értesítés. Így nem egy még
+            csukott/félig nyitott képet kapsz, és ha kell, az autónak
+            is van ideje beérni a képbe.
+          default: 3
+          selector:
+            number:
+              min: 0
+              max: 60
+              unit_of_measurement: mp
+              mode: box
+
+mode: single
+max_exceeded: silent
+
+triggers:
+  - id: zone_entry
+    trigger: zone
+    entity_id: !input person_entity
+    zone: !input zone_entity
+    event: enter
+  - id: alpr
+    trigger: state
+    entity_id: !input alpr_plate_sensor
+
+conditions:
+  - condition: state
+    entity_id: !input master_enable
+    state: "on"
+  - condition: template
+    value_template: >
+      {{ states(position_entity) == pos_closed_state }}
+  - condition: or
+    conditions:
+      - condition: template
+        value_template: "{{ not (night_enabled) }}"
+      - condition: not
+        conditions:
+          - condition: time
+            after: !input night_mode_start
+            before: !input night_mode_end
+  - condition: template
+    value_template: >
+      {{ this.attributes.last_triggered is none or
+         (now() - this.attributes.last_triggered).total_seconds() > cooldown }}
+  - condition: or
+    conditions:
+      - "{{ trigger.id != 'alpr' }}"
+      - "{{ alpr_enabled }}"
+
+variables:
+  gate_cover_entity: !input gate_cover
+  pos_sensor_input: !input position_sensor
+  pos_closed_state: !input position_sensor_closed_state
+  pos_open_state: !input position_sensor_open_state
+  position_entity: >
+    {{ pos_sensor_input if pos_sensor_input not in ['', None] else gate_cover_entity }}
+  bt_enabled: !input use_bluetooth
+  bt_sensor: !input bluetooth_sensor
+  bt_target: !input bluetooth_target_name
+  wifi_enabled: !input use_wifi
+  wifi_wait: !input wifi_wait_minutes
+  night_enabled: !input night_mode_enabled
+  cooldown: !input cooldown_seconds
+  autoclose_select: !input gate_autoclose_select
+  autoclose_option: !input gate_autoclose_option
+  notify_svc: !input notify_service
+  cam_entity: !input camera_entity
+  notify_delay: !input notification_delay_seconds
+  alpr_enabled: !input use_alpr
+  alpr_allowed: !input alpr_allowed_plates
+  bt_confirmed: >
+    {{ bt_enabled and bt_sensor != '' and bt_target != '' and
+       bt_target in ((state_attr(bt_sensor, 'connected_paired_devices') or []) | join(' ')) }}
+  alpr_confirmed: >
+    {{ trigger.id == 'alpr' and alpr_enabled and alpr_allowed != '' and
+       trigger.to_state is defined and trigger.to_state is not none and
+       (trigger.to_state.state | lower) in
+       (alpr_allowed.lower().split(',') | map('trim') | list) }}
+
+actions:
+  - choose:
+      # ALPR-trigger: vagy igazolt (folytatjuk lent), vagy nem
+      # engedélyezett rendszám (leállunk) - a zóna/BT/WiFi ágat ilyenkor
+      # nem is nézzük, teljesen független út.
+      - conditions:
+          - "{{ trigger.id == 'alpr' }}"
+        sequence:
+          - if:
+              - "{{ not alpr_confirmed }}"
+            then:
+              - stop: "Rendszámfelismerés: a felismert rendszám nincs az engedélyezett listán."
+      # Zóna-trigger, és a Bluetooth már azonnal igazolt - nincs
+      # további teendő, folytatjuk lent a nyitással.
+      - conditions:
+          - "{{ trigger.id == 'zone_entry' and bt_confirmed }}"
+        sequence: []
+    default:
+      # Csak zóna-trigger esetén jutunk ide (ALPR ágnál fentebb már
+      # eldőlt minden - vagy folytatta, vagy megállt).
+      - if:
+          - "{{ wifi_enabled }}"
+        then:
+          - wait_for_trigger:
+              - trigger: state
+                entity_id: !input wifi_sensor
+                to: !input wifi_target_bssid
+            timeout:
+              minutes: "{{ wifi_wait }}"
+          - if:
+              - "{{ wait.trigger is none }}"
+            then:
+              - stop: "Sem Bluetooth, sem WiFi nem igazolta az érkezést az időablakon belül."
+        else:
+          - stop: "A Bluetooth-ellenőrzés nem igazolt, és a WiFi-ellenőrzés nincs bekapcsolva."
+
+  # Végső, friss ellenőrzés közvetlenül nyitás előtt - a várakozás
+  # alatt közben történhetett kézi nyitás/zárás. A position_entity a
+  # fenti "Kapu-helyzet ellenőrzés" bemenettől függően vagy a kapu
+  # cover-je, vagy egy külön, megbízhatóbb szenzor.
+  - if:
+      - condition: template
+        value_template: "{{ states(position_entity) != pos_closed_state }}"
+    then:
+      - stop: "A kapu időközben már nem zárt állapotú, nem nyitunk rá."
+
+  - if:
+      - "{{ autoclose_select != '' and autoclose_option != '' }}"
+    then:
+      - action: select.select_option
+        target:
+          entity_id: "{{ autoclose_select }}"
+        data:
+          option: "{{ autoclose_option }}"
+
+  - action: cover.open_cover
+    target:
+      entity_id: !input gate_cover
+
+  # A fotó/értesítés csak akkor menjen, ha a kapu ténylegesen kinyílt -
+  # ne a nyitás megkezdésekor készüljön a kép. 30 mp a biztonsági felső
+  # korlát, ha a kapu (vagy a megadott külön szenzor) valamiért sosem
+  # jelezné a nyitott állapotot. Szándékosan repeat/delay-alapú
+  # figyelés wait_for_trigger helyett, mert a position_entity egy
+  # BEMENETTŐL függő, futásidejű Jinja-kifejezés (vagy a cover, vagy a
+  # külön megadott szenzor) - egy trigger entity_id-ja viszont statikus
+  # kell legyen, nem lehet ilyen dinamikus.
+  - repeat:
+      sequence:
+        - delay:
+            seconds: 1
+      until:
+        - condition: template
+          value_template: >
+            {{ states(position_entity) == pos_open_state or repeat.index >= 30 }}
+
+  # Ha 30 mp alatt sem jelez „nyitva” állapotot (pl. a kapumotor felhőkapcsolata megszakadt), ne menjen hamis
+  # „kinyílt” üzenet: figyelmeztetés, és itt megállunk.
+  - if:
+      - "{{ states(position_entity) != pos_open_state }}"
+    then:
+      - if:
+          - "{{ notify_svc != '' }}"
+        then:
+          - action: "{{ notify_svc }}"
+            data:
+              title: "⚠️ A kapu NEM nyitott ki"
+              message: >
+                Az automata nyitás parancsot küldött, de a kapu 30 mp alatt sem jelzett nyitott állapotot
+                ({{ states(position_entity) }}). Ellenőrizd a kaput és a kapumotor kapcsolatát.
+      - stop: "A kapu a nyitási parancs után sem jelzett nyitott állapotot."
+
+  - if:
+      - "{{ notify_delay > 0 }}"
+    then:
+      - delay:
+          seconds: "{{ notify_delay }}"
+
+  - if:
+      - "{{ notify_svc != '' }}"
+    then:
+      - action: "{{ notify_svc }}"
+        data:
+          title: "Kapu automatikusan kinyílt"
+          message: >
+            {% if trigger.id == 'alpr' %}
+              Rendszámfelismerés alapján a kapu kinyílt ({{ trigger.to_state.state }}).
+            {% elif bt_confirmed %}
+              Bluetooth-kapcsolat alapján a kapu kinyílt ({{ trigger.to_state.name if trigger.to_state is defined else '' }}).
+            {% else %}
+              WiFi-csatlakozás alapján a kapu kinyílt ({{ trigger.to_state.name if trigger.to_state is defined else '' }}).
+            {% endif %}
+          data: >
+            {{ {'image': '/api/camera_proxy/' ~ cam_entity} if cam_entity != '' else {} }}
