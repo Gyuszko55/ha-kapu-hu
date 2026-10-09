@@ -44,7 +44,12 @@ blueprint:
       entitás-regiszterben - Beállítások -> Eszközök és szolgáltatások
       -> az eszköz -> a szenzor -> fogaskerék -> Engedélyezés)
     - Ha WiFi-t használsz: a telefon Companion App "Wi-Fi Connection"
-      (BSSID) szenzora, ugyanígy engedélyezve
+      szenzora (a hálózat neve; vagy a BSSID szenzor), ugyanígy engedélyezve
+    - A telefonon: a Home Assistant appnak a helymeghatározás "Mindig"
+      és "Pontos hely" engedéllyel, akkumulátor-optimalizálás nélkül
+      (Xiaomi/Samsung/Huawei stb.: automatikus indítás be, korlátozás
+      nélkül) - különben a zóna és a WiFi-szenzor nem frissül időben.
+      Részletesen: a tároló README-jében, "Telefon beállítása".
     - Ha rendszámfelismerést használsz: egy Frigate (vagy hasonló)
       ALPR-szenzor, aminek az ÁLLAPOTA a legutóbb felismert rendszám
   domain: automation
@@ -170,18 +175,25 @@ blueprint:
           selector:
             boolean:
         wifi_sensor:
-          name: WiFi BSSID szenzor
+          name: WiFi szenzor (a telefoné)
           description: >
-            sensor.<telefon>_wi_fi_bssid (technikai okokból listaként
-            kérjük, de csak egyet válassz ki).
+            AJÁNLOTT: sensor.<telefon>_wi_fi_connection (a hálózat NEVÉT
+            adja). Lehet sensor.<telefon>_wi_fi_bssid is (a hozzáférési
+            pont azonosítója). Technikai okokból listaként kérjük, de csak
+            egyet válassz ki.
           default: []
           selector:
             entity:
               domain: sensor
               multiple: true
         wifi_target_bssid:
-          name: Otthoni WiFi BSSID
-          description: A router BSSID-je (pl. router admin felületéről).
+          name: Otthoni WiFi (hálózat neve vagy BSSID-k)
+          description: >
+            A Wi-Fi Connection szenzorhoz a hálózat neve (pl. "OtthoniWiFi").
+            BSSID szenzorhoz az otthoni hozzáférési pontok BSSID-jei
+            vesszővel elválasztva – egy kétsávos router 2, két router 4
+            különböző BSSID-t ad, mindet fel kell sorolni (ezért ajánlott a
+            hálózat neve). Kis- és nagybetű nem számít.
           default: ""
           selector:
             text:
@@ -370,6 +382,10 @@ variables:
   bt_target: !input bluetooth_target_name
   wifi_enabled: !input use_wifi
   wifi_wait: !input wifi_wait_minutes
+  wifi_sensor_list: !input wifi_sensor
+  wifi_target_raw: !input wifi_target_bssid
+  wifi_entity: "{{ (wifi_sensor_list | first) if wifi_sensor_list else '' }}"
+  wifi_targets: "{{ wifi_target_raw.split(',') | map('trim') | map('lower') | reject('eq', '') | list }}"
   night_enabled: !input night_mode_enabled
   cooldown: !input cooldown_seconds
   autoclose_select: !input gate_autoclose_select
@@ -411,16 +427,20 @@ actions:
       - if:
           - "{{ wifi_enabled }}"
         then:
-          - wait_for_trigger:
-              - trigger: state
-                entity_id: !input wifi_sensor
-                to: !input wifi_target_bssid
-            timeout:
-              minutes: "{{ wifi_wait }}"
+          # Ha a telefon a zónába lépéskor már az otthoni WiFi-n van, nem kell várni; különben a csatlakozásra
+          # várunk (a hálózat neve vagy a felsorolt BSSID-k egyike).
           - if:
-              - "{{ wait.trigger is none }}"
+              - "{{ wifi_entity == '' or (states(wifi_entity) | lower) not in wifi_targets }}"
             then:
-              - stop: "Sem Bluetooth, sem WiFi nem igazolta az érkezést az időablakon belül."
+              - wait_for_trigger:
+                  - trigger: template
+                    value_template: "{{ (states(wifi_entity) | lower) in wifi_targets }}"
+                timeout:
+                  minutes: "{{ wifi_wait }}"
+              - if:
+                  - "{{ wait.trigger is none }}"
+                then:
+                  - stop: "Sem Bluetooth, sem WiFi nem igazolta az érkezést az időablakon belül."
         else:
           - stop: "A Bluetooth-ellenőrzés nem igazolt, és a WiFi-ellenőrzés nincs bekapcsolva."
 

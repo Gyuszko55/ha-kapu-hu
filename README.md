@@ -25,19 +25,50 @@ csak utána küld értesítést, kamera-pillanatképpel.
 |---|---|---|---|
 | 1 | **Home Assistant 2025.10 vagy újabb** | Beállítások → Rendszer → Frissítések | igen |
 | 2 | **A kapu vagy garázsajtó integrációja**, amitől `cover` entitásként jelenik meg (pl. Shelly + sablon, ESPHome, a kapumotor gyári vagy felhős integrációja) | Beállítások → Eszközök és szolgáltatások (vagy HACS) | igen |
-| 3 | **Home Assistant Companion app** a telefonon, helymeghatározással, `person` entitáshoz rendelve | App Store / Google Play; Beállítások → Emberek | igen (kivéve, ha csak rendszámfelismerés kell) |
+| 3 | **Home Assistant Companion app** a telefonon, `person` entitáshoz rendelve, **„Mindig” helyhozzáféréssel és akkumulátor-korlátozás nélkül** | App Store / Google Play; Beállítások → Emberek; részletesen: [Telefon beállítása](#telefon-beállítása--ezen-szokott-elbukni) | igen (kivéve, ha csak rendszámfelismerés kell) |
 | 4 | **Otthon zóna** (`zone.home`) – vagy egy saját zóna a kapu körül | Beállítások → Területek és zónák → Zónák | igen |
 | 5 | **Kapcsoló segéd** a fő kapcsolóhoz, pl. „Kapu automata nyitás” (`input_boolean`) | Beállítások → Eszközök és szolgáltatások → Segédek → Segéd létrehozása → Kapcsoló | igen |
 | 6 | A Companion app **Bluetooth-kapcsolat** szenzora (`sensor.<telefon>_bluetooth_connection`), **engedélyezve** | a telefon eszközoldalán a szenzor → ⚙ → Engedélyezés (lásd lent) | a Bluetooth-úthoz |
-| 7 | A Companion app **WiFi BSSID** szenzora (`sensor.<telefon>_wi_fi_bssid`), **engedélyezve** | mint fent | a WiFi-úthoz |
+| 7 | A Companion app **Wi-Fi Connection** szenzora (`sensor.<telefon>_wi_fi_connection`, a hálózat nevét adja), **engedélyezve** | mint fent | a WiFi-úthoz |
 | 8 | **Megbízható kapuhelyzet-érzékelő** (pl. Zigbee mágneses nyitásérzékelő) vagy küszöbös sablon (lásd lent) | az érzékelő integrációja | nem, de ajánlott, ha a kapumotor pozíciója pontatlan |
 | 9 | **Kamera** a kapura (`camera` entitás) | a kamera integrációja | csak a képes értesítéshez |
 | 10 | **Rendszámfelismerés**: [Frigate](https://frigate.video/) (beépített rendszámfelismeréssel) vagy más szenzor, amelynek az állapota a felismert rendszám | Frigate add-on / külön gép | csak az ALPR-úthoz |
 
 > [!IMPORTANT]
-> A Companion app Bluetooth- és WiFi-szenzora a Home Assistantban gyakran **alapból le van tiltva**. A telefonon a
-> „Szenzorok kezelése” bekapcsolása **nem elég**: a Home Assistantban is engedélyezni kell (Beállítások → Eszközök és
-> szolgáltatások → Mobile App → a telefon → a szenzor → ⚙ → **Engedélyezve**), majd az appban frissíteni a szenzorokat.
+> A legtöbben **a telefon beállításán buknak el**, nem a blueprinten. Mielőtt élesítenéd, menj végig a
+> [Telefon beállítása](#telefon-beállítása--ezen-szokott-elbukni) lépésein – minden telefonon, amelyikkel nyitni akartok.
+
+## Telefon beállítása – ezen szokott elbukni
+
+Minden személy telefonján, a **Home Assistant (Companion) appban** és a telefon beállításaiban:
+
+1. **Helymeghatározás: „Mindig engedélyezve” és „Pontos hely”.** Telefon beállításai → Alkalmazások → Home Assistant →
+   Engedélyek → Hely. „Csak használat közben” engedéllyel a zónába lépés a háttérben nem jut el a Home Assistantig,
+   és Androidon a WiFi-hálózat neve sem olvasható ki (a szenzor `<unknown ssid>`-t ad).
+2. **Akkumulátor: korlátozás nélkül.** Telefon beállításai → Alkalmazások → Home Assistant → Akkumulátor →
+   „Nincs korlátozás” / „Nem optimalizált”. **Xiaomi / Redmi / POCO:** ugyanitt az **Automatikus indítás** is legyen
+   bekapcsolva. **Samsung:** vedd ki az „Alvó alkalmazások” közül. **Huawei / Honor:** Alkalmazásindítás → kézi kezelés,
+   mindhárom kapcsoló be. Különben a rendszer a háttérben leállítja az appot, és a szenzorok percekig nem frissülnek.
+3. **Szenzorok bekapcsolása az appban:** Home Assistant app → Beállítások → Companion app → **Szenzorok kezelése**:
+   - **Bluetooth-kapcsolat** (Bluetooth Connection) – a Bluetooth-úthoz;
+   - **Wi-Fi-kapcsolat** (Wi-Fi Connection) – a WiFi-úthoz (a hálózat nevét adja);
+   - a helymeghatározás (háttérbeli helyzet, zónák) legyen bekapcsolva.
+4. **Ugyanezek engedélyezése a Home Assistantban is.** A két szenzor entitása a Home Assistantban **alapból le van
+   tiltva**, a telefonon bekapcsolni **nem elég**: Beállítások → Eszközök és szolgáltatások → **Mobile App** → a telefon →
+   a szenzor → ⚙ → **Engedélyezve**. Utána az appban: Beállítások → Companion app → Szenzorok kezelése → lent
+   **Szenzorok frissítése** (vagy indítsd újra az appot).
+5. **Ellenőrzés:** otthon, a WiFi-n állva a `sensor.<telefon>_wi_fi_connection` állapota a hálózat neve legyen;
+   bekapcsolt autórádió mellett a `sensor.<telefon>_bluetooth_connection` *Csatlakoztatott párosított eszközök*
+   attribútumában szerepeljen az autó neve. A `person` entitás „Otthon”-ra váltson, amikor hazaérsz.
+
+**Miért a hálózat neve, és nem a BSSID?** A BSSID a hozzáférési pont azonosítója. Egy kétsávos router 2, két router
+(vagy mesh) 4 vagy több különböző BSSID-t ad, és a telefon hol az egyikre, hol a másikra csatlakozik. Ha csak egy
+BSSID-t adsz meg, a kapu sokszor nem nyílik. A blueprint ezért a hálózat nevét is elfogadja (ajánlott); BSSID-vel
+mindet fel kell sorolni, vesszővel elválasztva.
+
+**Ha a telefon Android Autóhoz kapcsolódik vezeték nélkül**, a telefon WiFi-je az autóhoz kötődik, és az otthoni
+hálózatra csak kiszállás után csatlakozik – ilyenkor a Bluetooth-út a megbízható. Kapcsold be mindkettőt: amelyik
+előbb igazol, az nyit.
 
 ## Telepítés
 
@@ -64,8 +95,8 @@ közös fő kapcsolóval mind egyszerre kikapcsolható.
 | | Bluetooth-kapcsolat szenzor | – | `sensor.<telefon>_bluetooth_connection` |
 | | Az autó Bluetooth-nevének részlete | – | pl. „Toyota”, „Car Multimedia” – a csatlakozott eszközök között keressük |
 | **WiFi** | WiFi használata | ki | késleltetett megerősítés: csatlakozás az otthoni hálózatra |
-| | WiFi BSSID szenzor | – | `sensor.<telefon>_wi_fi_bssid` |
-| | Otthoni WiFi BSSID | – | a router BSSID-je (a szenzor állapotából otthon kiolvasható) |
+| | WiFi szenzor | – | ajánlott: `sensor.<telefon>_wi_fi_connection` (hálózat neve); vagy `sensor.<telefon>_wi_fi_bssid` |
+| | Otthoni WiFi (hálózat neve vagy BSSID-k) | – | a hálózat neve, pl. `OtthoniWiFi`; BSSID-nél az összes otthoni BSSID vesszővel elválasztva. Kis- és nagybetű nem számít |
 | | Készenléti ablak | 3 perc | a zónába lépés után ennyi ideig várunk a WiFi-csatlakozásra |
 | **Rendszámfelismerés** | Rendszámfelismerés használata | ki | független út: engedélyezett rendszám → nyitás |
 | | Felismert rendszám szenzor | – | pl. Frigate szenzor, állapota a rendszám |
@@ -144,6 +175,9 @@ téved egyszerre, ezért a küszöbös pozíció és az érzékelő kombináció
 
 ### Egyéb
 
+- **Nem nyílt ki a kapu?** Az automatizálás oldalán → ⋮ → **Nyomkövetés** megmutatja, melyik feltétel nem teljesült
+  (pl. a WiFi-szenzor nem a várt nevet adta, vagy a Bluetooth-szenzorban nem szerepelt az autó). A leggyakoribb ok
+  az 1–2. lépés (helyhozzáférés, akkumulátor-korlátozás).
 - **Hálózati pingelés (nmap) nem jó jelenlétre:** a telefonok energiatakarékos WiFi-je miatt megbízhatatlan. A blueprint
   ezért a Companion app saját, eseményalapú szenzorait használja.
 - **Gombos tartalék:** egy autóban tartott Bluetooth-gomb (pl. Shelly BLU Button) külön automatizálással önálló,
